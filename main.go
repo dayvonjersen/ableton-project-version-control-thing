@@ -1,23 +1,12 @@
 /*
 TODO
- - git init if not exist
  - git rebase for commit messages
 	- watch a specially named text file ??? (hammers, nails, etc...)
- - git checkout REV && cat whatever.xml | gzip > whatever.als
-	- checkout hook ???
- - .gitignore *.* !*.xml ???
-/*
-#!/bin/bash
-for a in $(ls *.als); do
-	cat $a | gunzip > $a.xml
-	git add $a.xml
-done
-git commit
 */
 package main
 
 import (
-	"compress/gzip"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -81,7 +70,7 @@ func gitInit(f *file) {
 		{
 			f, err := os.OpenFile(gitDir+"/hooks/post-checkout", os.O_RDWR|os.O_CREATE, 0755)
 			checkErr(err)
-			io.WriteString(f, "for f in `ls --color=never *.xml`; do cat $f | gzip > ${f%%.xml}.als; done\n")
+			io.WriteString(f, "#!/bin/bash\nfor f in `ls --color=never *.xml`; do cat $f | gzip > ${f%%.xml}.als; done\n")
 			checkErr(f.Close())
 		}
 	}
@@ -89,18 +78,16 @@ func gitInit(f *file) {
 
 func gitCommit(f *file) {
 	gitInit(f)
-	xmlFile := strings.TrimSuffix(filepath.Base(f.Name), f.Ext) + ".xml"
+	alsFile := filepath.Base(f.Name)
+	xmlFile := strings.TrimSuffix(alsFile, f.Ext) + ".xml"
 	{
-		dest, err := os.OpenFile(xmlFile, os.O_RDWR|os.O_CREATE, 0755)
-		checkErr(err)
-		src, err := os.Open(f.Name)
-		checkErr(err)
-		r, err := gzip.NewReader(src)
-		checkErr(err)
-		io.Copy(dest, r)
-		checkErr(r.Close())
-		checkErr(dest.Close())
-		checkErr(src.Close())
+		cmd := exec.Command("sh", "-c", "cat "+alsFile+" | gunzip > "+xmlFile)
+		cmd.Dir = f.Dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			log.Println("error:", err)
+		}
 	}
 	{
 		cmd := exec.Command("git", "add", xmlFile)
@@ -150,6 +137,7 @@ func main() {
 	watchDir := "./test"
 	watchPaths := []string{watchDir}
 	watchPath := func(name string) {
+		name = normalizePathSeparators(name)
 		for _, path := range watchPaths {
 			if path == name {
 				return
@@ -157,7 +145,7 @@ func main() {
 		}
 		log.Println("watching", name)
 		watchPaths = append(watchPaths, name)
-		checkErr(w.Watch(name))
+		checkErr(w.AddWatch(name, winfs.FS_MODIFY|winfs.FS_CREATE|winfs.FS_MOVED_TO))
 	}
 
 	filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
@@ -188,6 +176,7 @@ func main() {
 	for {
 		select {
 		case e := <-w.Event:
+			// fmt.Println("debug:", e)
 			name := normalizePathSeparators(e.Name)
 			dir := normalizePathSeparators(filepath.Dir(name))
 			// fmt.Println("debug: name:", name)
