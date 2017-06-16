@@ -13,7 +13,6 @@ git commit
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -33,11 +32,20 @@ type file struct {
 }
 
 func gitCommit(f *file) {
-	cmd := exec.Command("git", "add", f.Name)
-	cmd.Dir = f.Dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	checkErr(cmd.Run())
+	{
+		cmd := exec.Command("git", "add", f.Name)
+		cmd.Dir = f.Dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		checkErr(cmd.Run())
+	}
+	{
+		cmd := exec.Command("git", "commit", "-m", "", "--allow-empty-message")
+		cmd.Dir = f.Dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		checkErr(cmd.Run())
+	}
 }
 
 type recentFiles []*file
@@ -73,16 +81,6 @@ func main() {
 
 	go func() {
 		for {
-			<-time.After(time.Second * 2)
-			log.Println("recent files:")
-			for _, f := range rf[:] {
-				fmt.Println(f.Name, f.Time)
-			}
-			fmt.Println()
-		}
-	}()
-	go func() {
-		for {
 			f := <-files
 			i, ok := rf.Find(f)
 			if !ok || rf[i].Time < f.Time {
@@ -99,16 +97,14 @@ func main() {
 	for {
 		select {
 		case e := <-w.Event:
-			// evtdir := strings.Replace(filepath.Dir(e.Name), "\\", "/", -1)
-			// rundir := strings.Split(evtdir, "/")[0]
-			// ext := filepath.Ext(file)
+			if filepath.Ext(e.Name) == ".go" {
+				files <- &file{
+					Name: filepath.Base(e.Name),
+					Dir:  strings.Replace(filepath.Dir(e.Name), "\\", "/", -1),
+					Time: time.Now().Unix(),
 
-			files <- &file{
-				Name: filepath.Base(e.Name),
-				Dir:  strings.Replace(filepath.Dir(e.Name), "\\", "/", -1),
-				Time: time.Now().Unix(),
-
-				info: e.String(),
+					info: e.String(),
+				}
 			}
 		case err := <-w.Error:
 			checkErr(err)
