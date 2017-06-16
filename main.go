@@ -15,18 +15,29 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	winfs "golang.org/x/exp/winfsnotify"
 )
 
 type file struct {
-	Name string
-	Time int64
+	Name, Dir string
+	Time      int64
 
 	info string
+}
+
+func gitCommit(f *file) {
+	cmd := exec.Command("git", "add", f.Name)
+	cmd.Dir = f.Dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	checkErr(cmd.Run())
 }
 
 type recentFiles []*file
@@ -81,7 +92,7 @@ func main() {
 					rf = append(rf, f)
 					sort.Sort(rf)
 				}
-				log.Println(f)
+				gitCommit(f)
 			}
 		}
 	}()
@@ -94,6 +105,7 @@ func main() {
 
 			files <- &file{
 				Name: filepath.Base(e.Name),
+				Dir:  strings.Replace(filepath.Dir(e.Name), "\\", "/", -1),
 				Time: time.Now().Unix(),
 
 				info: e.String(),
