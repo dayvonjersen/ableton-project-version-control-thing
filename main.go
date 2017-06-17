@@ -6,7 +6,6 @@ TODO
 package main
 
 import (
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -24,7 +23,6 @@ func normalizePathSeparators(path string) string {
 }
 
 func fileExists(filename string) bool {
-	// fmt.Println("debug:", filename)
 	f, err := os.Open(filename)
 	if os.IsNotExist(err) {
 		return false
@@ -43,6 +41,24 @@ func isDir(filename string) bool {
 	return finfo.IsDir()
 }
 
+func filePutContents(filename, contents string) {
+	f, err := os.Create(filename)
+	checkErr(err)
+	_, err = io.WriteString(f, contents)
+	checkErr(err)
+	checkErr(f.Close())
+}
+
+func shellExec(rundir, command string, args ...string) {
+	cmd := exec.Command(command, args...)
+	cmd.Dir = rundir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Println(command, strings.Join(args, " "), ":", err)
+	}
+}
+
 type file struct {
 	Name, Dir, Ext string
 	Time           int64
@@ -50,29 +66,10 @@ type file struct {
 
 func gitInit(f *file) {
 	gitDir := f.Dir + "/.git"
-	// fmt.Println("debug:", gitDir)
 	if !fileExists(gitDir) {
-		{
-			cmd := exec.Command("git", "init")
-			cmd.Dir = f.Dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				log.Println("error:", err)
-			}
-		}
-		{
-			f, err := os.OpenFile(gitDir+"/info/exclude", os.O_RDWR|os.O_CREATE, 0755)
-			checkErr(err)
-			io.WriteString(f, "*\n!*.xml\n")
-			checkErr(f.Close())
-		}
-		{
-			f, err := os.OpenFile(gitDir+"/hooks/post-checkout", os.O_RDWR|os.O_CREATE, 0755)
-			checkErr(err)
-			io.WriteString(f, "#!/bin/bash\nfor f in `ls --color=never *.xml`; do cat $f | gzip > ${f%%.xml}.als; done\n")
-			checkErr(f.Close())
-		}
+		shellExec(f.Dir, "git", "init")
+		filePutContents(gitDir+"/info/exclude", "*\n!*.xml\n")
+		filePutContents(gitDir+"/hooks/post-checkout", "#!/bin/bash\nfor f in `ls --color=never *.xml`; do cat $f | gzip > ${f%%.xml}.als; done\n")
 	}
 }
 
@@ -80,49 +77,22 @@ func gitCommit(f *file) {
 	gitInit(f)
 	alsFile := filepath.Base(f.Name)
 	xmlFile := strings.TrimSuffix(alsFile, f.Ext) + ".xml"
-	{
-		cmd := exec.Command("sh", "-c", "cat "+alsFile+" | gunzip > "+xmlFile)
-		cmd.Dir = f.Dir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Println("error:", err)
-		}
-	}
-	{
-		cmd := exec.Command("git", "add", xmlFile)
-		cmd.Dir = f.Dir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Println("error:", err)
-		}
-	}
-	{
-		cmd := exec.Command("git", "commit", "-m", "", "--allow-empty-message")
-		cmd.Dir = f.Dir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			log.Println("error:", err)
-		}
-	}
+
+	shellExec(f.Dir, "sh", "-c", "cat "+alsFile+" | gunzip > "+xmlFile)
+	shellExec(f.Dir, "git", "add", xmlFile)
+	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message")
 }
 
 type recentFiles []*file
 
-func (rf recentFiles) Len() int {
-	return len(rf)
-}
+func (rf recentFiles) Len() int { return len(rf) }
 func (rf recentFiles) Less(i, j int) bool {
 	if rf[i].Name == rf[j].Name {
 		return rf[i].Time > rf[j].Time
 	}
 	return rf[i].Name < rf[j].Name
 }
-func (rf recentFiles) Swap(i, j int) {
-	rf[i], rf[j] = rf[j], rf[i]
-}
+func (rf recentFiles) Swap(i, j int) { rf[i], rf[j] = rf[j], rf[i] }
 func (rf recentFiles) Find(f *file) (int, bool) {
 	i := sort.Search(len(rf), func(i int) bool {
 		return rf[i].Name == f.Name
@@ -176,11 +146,8 @@ func main() {
 	for {
 		select {
 		case e := <-w.Event:
-			// fmt.Println("debug:", e)
 			name := normalizePathSeparators(e.Name)
 			dir := normalizePathSeparators(filepath.Dir(name))
-			// fmt.Println("debug: name:", name)
-			// fmt.Println("debug: dir:", dir)
 			ext := filepath.Ext(name)
 			if ext == ".als" {
 				files <- &file{
