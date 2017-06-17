@@ -1,11 +1,7 @@
-/*
-TODO
- - git rebase for commit messages
-	- watch a specially named text file ??? (hammers, nails, etc...)
-*/
 package main
 
 import (
+	"bufio"
 	"io"
 	"log"
 	"os"
@@ -83,6 +79,10 @@ func gitCommit(f *file) {
 	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message")
 }
 
+func gitAmend(f *file, msg string) {
+	shellExec(f.Dir, "git", "commit", "--amend", "-m", msg, "--allow-empty-message")
+}
+
 type recentFiles []*file
 
 func (rf recentFiles) Len() int { return len(rf) }
@@ -127,6 +127,15 @@ func main() {
 
 	files := make(chan *file)
 	rf := recentFiles{}
+
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			if len(rf) > 0 {
+				gitAmend(rf[0], scanner.Text())
+			}
+		}
+	}()
 
 	go func() {
 		for {
