@@ -1,3 +1,8 @@
+/*
+	TODO:
+		- "UI" improvements
+		- git tags ???
+*/
 package main
 
 import (
@@ -55,6 +60,17 @@ func shellExec(rundir, command string, args ...string) {
 	}
 }
 
+func shellExecString(rundir, command string, args ...string) string {
+	cmd := exec.Command(command, args...)
+	cmd.Dir = rundir
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		log.Println(command, strings.Join(args, " "), ":", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 type file struct {
 	Name, Dir, Ext string
 	Time           int64
@@ -69,8 +85,16 @@ func gitInit(f *file) {
 	}
 }
 
+func gitOnMasterBranch(f *file) bool {
+	head := shellExecString(f.Dir, "git", "name-rev", "--name-only", "HEAD")
+	return head == "master"
+}
+
 func gitCommit(f *file) {
 	gitInit(f)
+	if !gitOnMasterBranch(f) {
+		return
+	}
 	alsFile := filepath.Base(f.Name)
 	xmlFile := strings.TrimSuffix(alsFile, f.Ext) + ".xml"
 
@@ -80,6 +104,9 @@ func gitCommit(f *file) {
 }
 
 func gitAmend(f *file, msg string) {
+	if !gitOnMasterBranch(f) {
+		return
+	}
 	shellExec(f.Dir, "git", "commit", "--amend", "-m", msg, "--allow-empty-message")
 }
 
