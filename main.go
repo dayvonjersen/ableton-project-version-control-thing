@@ -160,16 +160,16 @@ func main() {
 	filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && !strings.Contains(path, ".git") {
 			if !dirExists(path + "/.git") {
-				if matches, err := filepath.Glob("*.als"); err == nil && matches != nil {
-					for _, m := range matches {
-						f := &file{
-							Name: path + "/" + m,
-							Dir:  path,
-							Ext:  ".als",
-							Time: time.Now().Unix(),
-						}
-						gitCommit(f)
+				matches, err := filepath.Glob(path + "/*.als")
+				checkErr(err)
+				for _, m := range matches {
+					f := &file{
+						Name: filepath.Base(m),
+						Dir:  path,
+						Ext:  ".als",
+						Time: time.Now().Unix(),
 					}
+					gitCommit(f)
 				}
 			}
 			watchPath(path)
