@@ -2,6 +2,7 @@
 	TODO:
 		- "UI" improvements
 		- git tags ???
+		- macOS support
 */
 package main
 
