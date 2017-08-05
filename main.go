@@ -33,6 +33,15 @@ func fileExists(filename string) bool {
 	return true
 }
 
+func dirExists(path string) bool {
+	finfo, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return false
+	}
+	checkErr(err)
+	return finfo.IsDir()
+}
+
 func isDir(filename string) bool {
 	finfo, err := os.Stat(filename)
 	if os.IsNotExist(err) {
@@ -82,9 +91,9 @@ func gitInit(f *file) {
 		return
 	}
 	shellExec(f.Dir, "git", "init")
+	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message", "--allow-empty")
 	filePutContents(gitDir+"/info/exclude", "*\n!*.xml\n")
 	filePutContents(gitDir+"/hooks/post-checkout", "#!/bin/bash\nfor f in `ls --color=never *.xml`; do cat $f | gzip > ${f%%.xml}.als; done\n")
-	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message", "--allow-empty")
 }
 
 func gitOnMasterBranch(f *file) bool {
@@ -150,6 +159,19 @@ func main() {
 
 	filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && !strings.Contains(path, ".git") {
+			if !dirExists(path + "/.git") {
+				if matches, err := filepath.Glob("*.als"); err == nil && matches != nil {
+					for _, m := range matches {
+						f := &file{
+							Name: path + "/" + m,
+							Dir:  path,
+							Ext:  ".als",
+							Time: time.Now().Unix(),
+						}
+						gitCommit(f)
+					}
+				}
+			}
 			watchPath(path)
 		}
 		return err
