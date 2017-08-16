@@ -43,15 +43,6 @@ func dirExists(path string) bool {
 	return finfo.IsDir()
 }
 
-func isDir(filename string) bool {
-	finfo, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	checkErr(err)
-	return finfo.IsDir()
-}
-
 func filePutContents(filename, contents string) {
 	f, err := os.Create(filename)
 	checkErr(err)
@@ -218,7 +209,7 @@ func main() {
 					Ext:  ext,
 					Time: time.Now().Unix(),
 				}
-			} else if isDir(name) && !strings.Contains(name, ".git") {
+			} else if dirExists(name) && !strings.Contains(name, ".git") {
 				watchPath(name)
 			}
 		case err := <-w.Error:
