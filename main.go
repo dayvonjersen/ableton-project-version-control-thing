@@ -152,11 +152,20 @@ func main() {
 	filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && !strings.Contains(path, ".git") {
 			if !dirExists(path + "/.git") {
-				matches, err := filepath.Glob(path + "/*.als")
+				dir, err := os.Open(path)
 				checkErr(err)
-				for _, m := range matches {
+				files, err := dir.Readdir(-1)
+				checkErr(err)
+				alsFiles := []string{}
+				for _, f := range files {
+					if filepath.Ext(f.Name()) == ".als" {
+						alsFiles = append(alsFiles, f.Name())
+					}
+				}
+				dir.Close()
+				for _, alsFile := range alsFiles {
 					f := &file{
-						Name: filepath.Base(m),
+						Name: alsFile,
 						Dir:  path,
 						Ext:  ".als",
 						Time: time.Now().Unix(),
