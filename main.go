@@ -76,7 +76,6 @@ func gitInit(filename string) {
 	}
 
 	shellExec(dir, "git", "init")
-	shellExec(dir, "git", "commit", "-m", "", "--allow-empty-message", "--allow-empty")
 	filePutContents(gitDir+"/info/exclude", gitIgnoreFile)
 	filePutContents(gitDir+"/hooks/post-checkout", gitPostCheckoutHook)
 }
@@ -84,8 +83,12 @@ func gitInit(filename string) {
 func gitOnMasterBranch(filename string) bool {
 	dir, _ := splitFilename(filename)
 
-	head := shellExecString(dir, "git", "name-rev", "--name-only", "HEAD")
-	return head == "master"
+	head := fileGetContents(dir + "/.git/HEAD")
+	if strings.HasPrefix(head, "ref: refs/heads/") {
+		return strings.TrimSpace(strings.TrimPrefix(head, "ref: refs/heads/")) == "master"
+	}
+
+	return false
 }
 
 func gitCommit(filename string) {
@@ -115,8 +118,43 @@ func gitAmend(filename, msg string) {
 func main() {
 	// TODO(tso): flags?
 
-	var lastFilenameMu sync.Mutex
-	lastFilename := ""
+	// NOTE(tso): this commits the latest version of all existing .als files
+	//            creating new repos where necessary
+	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() && !strings.Contains(path, ".git") {
+			path = normalizePathSeparators(path)
+			if !dirExists(path + "/.git") {
+				dir, err := os.Open(path)
+				checkErr(err)
+				files, err := dir.Readdir(-1)
+				checkErr(err)
+				for _, f := range files {
+					if filepath.Ext(f.Name()) == ".als" {
+						gitCommit(path + "/" + f.Name())
+					}
+				}
+				dir.Close()
+			}
+		}
+		return err
+	})
+
+	// NOTE(tso): this watches the current directory and all subdirectories for changes
+	//            and automatically commits all changes to .als files
+	//            every time the file is written (saved)
+	var (
+		lastFilename   string
+		lastFilenameMu sync.Mutex
+		// NOTE(tso): this mutex is necessary because the fsnotify stuff runs async
+		// and i just don't want to run into problems.
+		//
+		// if the dispatcher calls the callback function synchronously instead,
+		// it will throw off the timing with the fsnotify events, because
+		// the callback function will get called for every event which actually
+		// occurred in a < 100ms window because git is very slow
+		//
+		// -tso 2019-04-18 01:43:35a
+	)
 
 	w, err := newWatcher(
 		func(filename string) bool {
@@ -137,16 +175,6 @@ func main() {
 
 	// NOTE(tso):  this lets you change the last commit message
 	// by typing into the console while this program is running
-	//
-	// the mutex is necessary because the fsnotify stuff runs async
-	// and i just don't want to run into problems.
-	//
-	// if the dispatcher calls the callback function synchronously instead,
-	// it will throw off the timing with the fsnotify events, because
-	// the callback function will get called for every event which actually
-	// occurred in a < 100ms window because git is very slow
-	//
-	// -tso 2019-04-18 01:43:35a
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		lastFilenameMu.Lock()
@@ -155,38 +183,4 @@ func main() {
 		}
 		lastFilenameMu.Unlock()
 	}
-
-	/*
-		    this commits the latest version of all existing .als files
-		    creating new repos where necessary
-
-			filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
-				if info.IsDir() && !strings.Contains(path, ".git") {
-					if !dirExists(path + "/.git") {
-						dir, err := os.Open(path)
-						checkErr(err)
-						files, err := dir.Readdir(-1)
-						checkErr(err)
-						alsFiles := []string{}
-						for _, f := range files {
-							if filepath.Ext(f.Name()) == ".als" {
-								alsFiles = append(alsFiles, f.Name())
-							}
-						}
-						dir.Close()
-						for _, alsFile := range alsFiles {
-							f := &file{
-								Name: alsFile,
-								Dir:  path,
-								Ext:  ".als",
-								Time: time.Now().Unix(),
-							}
-							gitCommit(f)
-						}
-					}
-					watchPath(path)
-				}
-				return err
-			})
-	*/
 }

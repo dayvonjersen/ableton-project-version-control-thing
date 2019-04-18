@@ -8,6 +8,16 @@
             nah, i'm familiar with walk so it'll be easier to mock up
             then we can make the real thing with Qt
          )
+
+    describe workflow for using previous versions:
+        - git log, copy hash of revision you want
+            highlight how using commit messages really helps in this regard
+            if you save often (which you should)
+        - git checkout [hash]
+            - can also do git checkout HEAD^, HEAD^^^^^ etc...
+        - File > Open Recent Files > current project
+
+        TODO(tso): figure out how to get back to master branch from here so saving works again...
 -->
 # ableton-autosave
 
