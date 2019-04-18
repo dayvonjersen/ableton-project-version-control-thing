@@ -16,7 +16,10 @@
 package main
 
 import (
+	"compress/gzip"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -27,6 +30,58 @@ type file struct {
 	Time           int64
 }
 
+const (
+	gitIgnoreFile = `*
+!*.xml
+`
+	gitPostCheckoutHook = `#!/bin/bash
+for f in *.xml; do cat "$f" | gzip > "${f%%.xml}.als"; done
+`
+)
+
+func gunzip(src, dest string) error {
+	inFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer checkErr(inFile.Close())
+
+	gz, err := gzip.NewReader(inFile)
+	if err != nil {
+		return err
+	}
+	defer checkErr(gz.Close())
+
+	outFile, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer checkErr(outFile.Close())
+
+	_, err = io.Copy(outFile, gz)
+	return err
+}
+
+func _gzip(src, dest string) error {
+	outFile, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		return err
+	}
+	defer checkErr(outFile.Close())
+
+	gz := gzip.NewWriter(outFile)
+	defer checkErr(gz.Close())
+
+	inFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer checkErr(inFile.Close())
+
+	_, err = io.Copy(gz, inFile)
+	return err
+}
+
 func gitInit(f *file) {
 	gitDir := f.Dir + "/.git"
 	if fileExists(gitDir) {
@@ -34,8 +89,8 @@ func gitInit(f *file) {
 	}
 	shellExec(f.Dir, "git", "init")
 	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message", "--allow-empty")
-	filePutContents(gitDir+"/info/exclude", "*\n!*.xml\n")
-	filePutContents(gitDir+"/hooks/post-checkout", "#!/bin/bash\nfor f in `ls --color=never *.xml`; do cat $f | gzip > ${f%%.xml}.als; done\n")
+	filePutContents(gitDir+"/info/exclude", gitIgnoreFile)
+	filePutContents(gitDir+"/hooks/post-checkout", gitPostCheckoutHook)
 }
 
 func gitOnMasterBranch(f *file) bool {
@@ -48,11 +103,11 @@ func gitCommit(f *file) {
 	if !gitOnMasterBranch(f) {
 		return
 	}
-	alsFile := filepath.Base(f.Name)
-	xmlFile := strings.TrimSuffix(alsFile, f.Ext) + ".xml"
 
-	shellExec(f.Dir, "sh", "-c", "cat "+alsFile+" | gunzip > "+xmlFile)
-	shellExec(f.Dir, "git", "add", xmlFile)
+	xmlFilename := strings.TrimSuffix(f.Name, ".als") + ".xml"
+	checkErr(gunzip(f.Name, xmlFilename))
+
+	shellExec(f.Dir, "git", "add", xmlFilename)
 	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message")
 }
 
