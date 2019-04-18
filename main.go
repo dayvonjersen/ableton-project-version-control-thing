@@ -1,7 +1,6 @@
 /*
 TODO(tso):
     - update readme
-    - make checking out previous versions for preview and to actually revert less painful
     - create UI concept I've outlined on a piece of paper
 */
 
@@ -95,10 +94,6 @@ func gitOnMasterBranch(filename string) bool {
 }
 
 func gitCommit(filename string) {
-	gitInit(filename)
-	if !gitOnMasterBranch(filename) {
-		return
-	}
 
 	xmlFilename := strings.TrimSuffix(normalizePathSeparators(filename), ".als") + ".xml"
 	checkErr(gunzip(filename, xmlFilename))
@@ -118,6 +113,22 @@ func gitAmend(filename, msg string) {
 	shellExec(dir, "git", "commit", "--amend", "-m", msg, "--allow-empty-message")
 }
 
+func gitLog(filename string) {
+	dir, _ := splitFilename(filename)
+	shellExecAttach(dir, "git", "log", "--stat", `--format=%h %cr %s`)
+}
+
+func gitCheckout(filename, revision string) {
+	dir, fname := splitFilename(filename)
+	shellExec(dir, "git", "checkout", revision, "--", fname)
+}
+
+func gitReset(filename string) {
+	dir, fname := splitFilename(filename)
+	shellExecSilent(dir, "git", "reset", "HEAD")
+	shellExec(dir, "git", "checkout", fname)
+}
+
 func main() {
 	// TODO(tso): flags?
 
@@ -133,7 +144,11 @@ func main() {
 				checkErr(err)
 				for _, f := range files {
 					if filepath.Ext(f.Name()) == ".als" {
-						gitCommit(path + "/" + f.Name())
+						filename := path + "/" + f.Name()
+						gitInit(filename)
+						if gitOnMasterBranch(filename) {
+							gitCommit(filename)
+						}
 					}
 				}
 				dir.Close()
@@ -166,7 +181,10 @@ func main() {
 		},
 		func(filename string) {
 			fmt.Println(" callback got:", filename)
-			gitCommit(filename)
+			gitInit(filename)
+			if gitOnMasterBranch(filename) {
+				gitCommit(filename)
+			}
 			lastFilenameMu.Lock()
 			defer lastFilenameMu.Unlock()
 			lastFilename = filename
@@ -176,14 +194,56 @@ func main() {
 
 	w.AddWithSubdirs(".")
 
-	// NOTE(tso):  this lets you change the last commit message
-	// by typing into the console while this program is running
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
+		text := scanner.Text()
+
 		lastFilenameMu.Lock()
-		if lastFilename != "" {
-			gitAmend(lastFilename, scanner.Text())
-		}
+		last := lastFilename
 		lastFilenameMu.Unlock()
+
+		args := strings.SplitN(text, " ", 2)
+		switch args[0] {
+		case "": // do nothing
+		case "set":
+			if len(args) == 2 {
+				if fileExists(args[1]) {
+					lastFilenameMu.Lock()
+					lastFilename = args[1]
+					lastFilenameMu.Unlock()
+					fmt.Println("[ OK ] current file set to:", args[1])
+				}
+			}
+		case "log":
+			if checkLast(last) {
+				gitLog(last)
+			}
+		case "checkout":
+			if len(args) == 2 && checkLast(last) {
+				gitCheckout(last, args[1])
+			}
+		case "save":
+			if len(args) == 2 && checkLast(last) {
+				gitCommit(last)
+			}
+		case "cancel":
+			if checkLast(last) {
+				gitReset(last)
+			}
+		default:
+			// NOTE(tso):  this lets you change the last commit message
+			// by typing into the console while this program is running
+			if checkLast(last) {
+				gitAmend(last, text)
+			}
+		}
 	}
+}
+
+func checkLast(last string) bool {
+	if last == "" {
+		fmt.Println("[OHNO] current file not set")
+		return false
+	}
+	return true
 }

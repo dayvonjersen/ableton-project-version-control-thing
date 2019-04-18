@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -84,4 +85,24 @@ func shellExecString(rundir, command string, args ...string) string {
 		log.Println(command, strings.Join(args, " "), ":", err)
 	}
 	return strings.TrimSpace(string(out))
+}
+func shellExecAttach(rundir, command string, args ...string) {
+	cmd := exec.Command(command, args...)
+	cmd.Dir = rundir
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Println(command, strings.Join(args, " "), ":", err)
+	}
+}
+
+func shellExecSilent(rundir, command string, args ...string) {
+	cmd := exec.Command(command, args...)
+	cmd.Dir = rundir
+	cmd.Stdout = ioutil.Discard
+	cmd.Stderr = ioutil.Discard
+	if err := cmd.Run(); err != nil {
+		log.Println(command, strings.Join(args, " "), ":", err)
+	}
 }
