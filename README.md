@@ -1,3 +1,14 @@
+<!--
+    should mention that you 
+        LOSE YOUR ENTIRE FUCKING UNDO HISTORY EVERY TIME YOU SAVE IN ABLETON
+
+    that it should work on macOS now
+        but the GUI will be for windows only at this time
+         (maybe should use Qt instead of walk to scaffold...
+            nah, i'm familiar with walk so it'll be easier to mock up
+            then we can make the real thing with Qt
+         )
+-->
 # ableton-autosave
 
 > Automatic version control with git for Ableton Live projects
