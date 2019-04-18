@@ -1,5 +1,8 @@
 /*
-TODO(tso): create UI concept I've outlined on a piece of paper
+TODO(tso):
+    - update readme
+    - make checking out previous versions for preview and to actually revert less painful
+    - create UI concept I've outlined on a piece of paper
 */
 
 package main

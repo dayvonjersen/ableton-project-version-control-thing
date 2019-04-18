@@ -10,14 +10,29 @@
          )
 
     describe workflow for using previous versions:
+    FIRST:
         - git log, copy hash of revision you want
             highlight how using commit messages really helps in this regard
             if you save often (which you should)
+    
+    PREVIEW (optional):
+        NOTE: auto-commit will be disabled!!!
+
         - git checkout [hash]
             - can also do git checkout HEAD^, HEAD^^^^^ etc...
         - File > Open Recent Files > current project
 
-        TODO(tso): figure out how to get back to master branch from here so saving works again...
+    REVERT:
+        git checkout master
+        git ls-tree [hash]
+
+        100644 blob 1237b90f9e287a8ba1ea55ea489c655b204bd7f0    test.xml
+        100644 blob f1e6b766d28bf993837a6ce375b634b5ab58cbfd    this is a test for arbitrary filenames %% &.xml
+
+        NOTE: .ALS NOT .XML
+        git cat-file [file hash] | gzip > filename.als
+
+        (should auto-commit)    
 -->
 # ableton-autosave
 
