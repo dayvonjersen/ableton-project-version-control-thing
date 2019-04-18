@@ -1,8 +1,8 @@
 /*
    TODO:
    1. fix the stuff i know isn't working correctly rn
-       - files with spaces in the names
-       *** actually running when i hit ctrl+s in ableton ***
+       ✓ files with spaces in the names
+       ✓ actually running when i hit ctrl+s in ableton
 
       get this working for a single directory before
 
@@ -21,14 +21,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
-
-type file struct {
-	Name, Dir, Ext string
-	Time           int64
-}
 
 const (
 	gitIgnoreFile = `*
@@ -44,19 +38,19 @@ func gunzip(src, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer checkErr(inFile.Close())
+	defer inFile.Close()
 
 	gz, err := gzip.NewReader(inFile)
 	if err != nil {
 		return err
 	}
-	defer checkErr(gz.Close())
+	defer gz.Close()
 
 	outFile, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
 	}
-	defer checkErr(outFile.Close())
+	defer outFile.Close()
 
 	_, err = io.Copy(outFile, gz)
 	return err
@@ -67,55 +61,64 @@ func _gzip(src, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer checkErr(outFile.Close())
+	defer outFile.Close()
 
 	gz := gzip.NewWriter(outFile)
-	defer checkErr(gz.Close())
+	defer gz.Close()
 
 	inFile, err := os.Open(src)
 	if err != nil {
 		return err
 	}
-	defer checkErr(inFile.Close())
+	defer inFile.Close()
 
 	_, err = io.Copy(gz, inFile)
 	return err
 }
 
-func gitInit(f *file) {
-	gitDir := f.Dir + "/.git"
+func gitInit(filename string) {
+	dir, _ := splitFilename(filename)
+	gitDir := dir + "/.git"
+
 	if fileExists(gitDir) {
 		return
 	}
-	shellExec(f.Dir, "git", "init")
-	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message", "--allow-empty")
+
+	shellExec(dir, "git", "init")
+	shellExec(dir, "git", "commit", "-m", "", "--allow-empty-message", "--allow-empty")
 	filePutContents(gitDir+"/info/exclude", gitIgnoreFile)
 	filePutContents(gitDir+"/hooks/post-checkout", gitPostCheckoutHook)
 }
 
-func gitOnMasterBranch(f *file) bool {
-	head := shellExecString(f.Dir, "git", "name-rev", "--name-only", "HEAD")
+func gitOnMasterBranch(filename string) bool {
+	dir, _ := splitFilename(filename)
+
+	head := shellExecString(dir, "git", "name-rev", "--name-only", "HEAD")
 	return head == "master"
 }
 
-func gitCommit(f *file) {
-	gitInit(f)
-	if !gitOnMasterBranch(f) {
+func gitCommit(filename string) {
+	gitInit(filename)
+	if !gitOnMasterBranch(filename) {
 		return
 	}
 
-	xmlFilename := strings.TrimSuffix(f.Name, ".als") + ".xml"
-	checkErr(gunzip(f.Name, xmlFilename))
+	xmlFilename := strings.TrimSuffix(normalizePathSeparators(filename), ".als") + ".xml"
+	checkErr(gunzip(filename, xmlFilename))
 
-	shellExec(f.Dir, "git", "add", xmlFilename)
-	shellExec(f.Dir, "git", "commit", "-m", "", "--allow-empty-message")
+	dir, xmlFilename := splitFilename(xmlFilename)
+
+	shellExec(dir, "git", "add", xmlFilename)
+	shellExec(dir, "git", "commit", "-m", "", "--allow-empty-message")
 }
 
-func gitAmend(f *file, msg string) {
-	if !gitOnMasterBranch(f) {
+func gitAmend(filename, msg string) {
+	if !gitOnMasterBranch(filename) {
 		return
 	}
-	shellExec(f.Dir, "git", "commit", "--amend", "-m", msg, "--allow-empty-message")
+
+	dir, _ := splitFilename(filename)
+	shellExec(dir, "git", "commit", "--amend", "-m", msg, "--allow-empty-message")
 }
 
 func main() {
@@ -126,6 +129,7 @@ func main() {
 		},
 		func(filename string) {
 			fmt.Println(" callback got:", filename)
+			gitCommit(filename)
 		},
 	)
 	checkErr(err)
@@ -226,6 +230,9 @@ func main() {
 	*/
 }
 
+/*
+this probably isn't needed anymore
+
 type recentFiles []*file
 
 func (rf recentFiles) Len() int { return len(rf) }
@@ -242,3 +249,4 @@ func (rf recentFiles) Find(f *file) (int, bool) {
 	})
 	return i, i < len(rf) && rf[i].Name == f.Name
 }
+*/

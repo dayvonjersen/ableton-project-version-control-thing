@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -16,6 +17,12 @@ func checkErr(err error) {
 
 func normalizePathSeparators(path string) string {
 	return strings.Replace(path, "\\", "/", -1)
+}
+
+func splitFilename(filename string) (dir, file string) {
+	filename = normalizePathSeparators(filename)
+	dir = normalizePathSeparators(filepath.Dir(filename))
+	return dir, strings.TrimPrefix(strings.TrimPrefix(filename, dir), "/")
 }
 
 func fileExists(filename string) bool {
