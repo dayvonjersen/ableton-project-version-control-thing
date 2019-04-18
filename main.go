@@ -1,76 +1,26 @@
 /*
-	TODO:
-		- "UI" improvements
-		- git tags ???
-		- macOS support
+   TODO:
+   1. fix the stuff i know isn't working correctly rn
+       - files with spaces in the names
+       *** actually running when i hit ctrl+s in ableton ***
+
+      get this working for a single directory before
+
+   2. ensuring recursive behavior works correctly
+
+      then
+
+   3. create UI concept I've outlined on a piece of paper
 */
+
 package main
 
 import (
-	"bufio"
-	"io"
-	"log"
-	"os"
-	"os/exec"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
-
-	winfs "golang.org/x/exp/winfsnotify"
 )
-
-func normalizePathSeparators(path string) string {
-	return strings.Replace(path, "\\", "/", -1)
-}
-
-func fileExists(filename string) bool {
-	f, err := os.Open(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	checkErr(err)
-	checkErr(f.Close())
-	return true
-}
-
-func dirExists(path string) bool {
-	finfo, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return false
-	}
-	checkErr(err)
-	return finfo.IsDir()
-}
-
-func filePutContents(filename, contents string) {
-	f, err := os.Create(filename)
-	checkErr(err)
-	_, err = io.WriteString(f, contents)
-	checkErr(err)
-	checkErr(f.Close())
-}
-
-func shellExec(rundir, command string, args ...string) {
-	cmd := exec.Command(command, args...)
-	cmd.Dir = rundir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Println(command, strings.Join(args, " "), ":", err)
-	}
-}
-
-func shellExecString(rundir, command string, args ...string) string {
-	cmd := exec.Command(command, args...)
-	cmd.Dir = rundir
-	cmd.Stderr = os.Stderr
-	out, err := cmd.Output()
-	if err != nil {
-		log.Println(command, strings.Join(args, " "), ":", err)
-	}
-	return strings.TrimSpace(string(out))
-}
 
 type file struct {
 	Name, Dir, Ext string
@@ -113,6 +63,113 @@ func gitAmend(f *file, msg string) {
 	shellExec(f.Dir, "git", "commit", "--amend", "-m", msg, "--allow-empty-message")
 }
 
+func main() {
+	w, err := newWatcher(
+		func(filename string) bool {
+			fmt.Println("validator got:", filename)
+			return filepath.Ext(filename) == ".als"
+		},
+		func(filename string) {
+			fmt.Println(" callback got:", filename)
+		},
+	)
+	checkErr(err)
+
+	w.AddWithSubdirs(".")
+
+	/*
+		    this commits the latest version of all existing .als files
+		    creating new repos where necessary
+
+			filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
+				if info.IsDir() && !strings.Contains(path, ".git") {
+					if !dirExists(path + "/.git") {
+						dir, err := os.Open(path)
+						checkErr(err)
+						files, err := dir.Readdir(-1)
+						checkErr(err)
+						alsFiles := []string{}
+						for _, f := range files {
+							if filepath.Ext(f.Name()) == ".als" {
+								alsFiles = append(alsFiles, f.Name())
+							}
+						}
+						dir.Close()
+						for _, alsFile := range alsFiles {
+							f := &file{
+								Name: alsFile,
+								Dir:  path,
+								Ext:  ".als",
+								Time: time.Now().Unix(),
+							}
+							gitCommit(f)
+						}
+					}
+					watchPath(path)
+				}
+				return err
+			})
+	*/
+
+	/*
+		    this keeps track of the last repo we worked in
+
+			files := make(chan *file)
+			rf := recentFiles{}
+	*/
+
+	/*
+		    this lets you change the commit message by typing into the console when this program is running
+			go func() {
+				scanner := bufio.NewScanner(os.Stdin)
+				for scanner.Scan() {
+					if len(rf) > 0 {
+						gitAmend(rf[0], scanner.Text())
+					}
+				}
+			}()
+	*/
+
+	/*
+		    this is the old dispatcher routine
+			go func() {
+				for {
+					f := <-files
+					i, ok := rf.Find(f)
+					if !ok || rf[i].Time < f.Time {
+						if ok {
+							rf[i].Time = f.Time
+						} else {
+							rf = append(rf, f)
+							sort.Sort(rf)
+						}
+						gitCommit(f)
+					}
+				}
+			}()
+			for {
+				select {
+				case e := <-w.Event:
+					name := normalizePathSeparators(e.Name)
+					dir := normalizePathSeparators(filepath.Dir(name))
+					ext := filepath.Ext(name)
+					if ext == ".als" {
+						files <- &file{
+							Name: name,
+							Dir:  dir,
+							Ext:  ext,
+							Time: time.Now().Unix(),
+						}
+					} else if dirExists(name) && !strings.Contains(name, ".git") {
+						watchPath(name)
+					}
+				case err := <-w.Error:
+					checkErr(err)
+				}
+			}
+	*/
+}
+
 type recentFiles []*file
 
 func (rf recentFiles) Len() int { return len(rf) }
@@ -128,107 +185,4 @@ func (rf recentFiles) Find(f *file) (int, bool) {
 		return rf[i].Name == f.Name
 	})
 	return i, i < len(rf) && rf[i].Name == f.Name
-}
-
-func main() {
-	w, err := winfs.NewWatcher()
-	checkErr(err)
-
-	watchDir := "."
-	watchPaths := []string{}
-	watchPath := func(name string) {
-		name = normalizePathSeparators(name)
-		for _, path := range watchPaths {
-			if path == name {
-				return
-			}
-		}
-		log.Println("watching", name)
-		watchPaths = append(watchPaths, name)
-		checkErr(w.AddWatch(name, winfs.FS_MODIFY|winfs.FS_CREATE|winfs.FS_MOVED_TO))
-	}
-	watchPath(watchDir)
-
-	filepath.Walk(watchDir, func(path string, info os.FileInfo, err error) error {
-		if info.IsDir() && !strings.Contains(path, ".git") {
-			if !dirExists(path + "/.git") {
-				dir, err := os.Open(path)
-				checkErr(err)
-				files, err := dir.Readdir(-1)
-				checkErr(err)
-				alsFiles := []string{}
-				for _, f := range files {
-					if filepath.Ext(f.Name()) == ".als" {
-						alsFiles = append(alsFiles, f.Name())
-					}
-				}
-				dir.Close()
-				for _, alsFile := range alsFiles {
-					f := &file{
-						Name: alsFile,
-						Dir:  path,
-						Ext:  ".als",
-						Time: time.Now().Unix(),
-					}
-					gitCommit(f)
-				}
-			}
-			watchPath(path)
-		}
-		return err
-	})
-
-	files := make(chan *file)
-	rf := recentFiles{}
-
-	go func() {
-		scanner := bufio.NewScanner(os.Stdin)
-		for scanner.Scan() {
-			if len(rf) > 0 {
-				gitAmend(rf[0], scanner.Text())
-			}
-		}
-	}()
-
-	go func() {
-		for {
-			f := <-files
-			i, ok := rf.Find(f)
-			if !ok || rf[i].Time < f.Time {
-				if ok {
-					rf[i].Time = f.Time
-				} else {
-					rf = append(rf, f)
-					sort.Sort(rf)
-				}
-				gitCommit(f)
-			}
-		}
-	}()
-	for {
-		select {
-		case e := <-w.Event:
-			name := normalizePathSeparators(e.Name)
-			dir := normalizePathSeparators(filepath.Dir(name))
-			ext := filepath.Ext(name)
-			if ext == ".als" {
-				files <- &file{
-					Name: name,
-					Dir:  dir,
-					Ext:  ext,
-					Time: time.Now().Unix(),
-				}
-			} else if dirExists(name) && !strings.Contains(name, ".git") {
-				watchPath(name)
-			}
-		case err := <-w.Error:
-			checkErr(err)
-		}
-	}
-}
-
-func checkErr(err error) {
-	if err != nil {
-		log.Panicln(err)
-	}
 }
