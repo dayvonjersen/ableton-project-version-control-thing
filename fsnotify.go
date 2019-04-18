@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -61,17 +60,17 @@ func (w *watcher) relay() {
 func (w *watcher) dispatch() {
 	var last time.Time
 	for e := range w.events {
-		diff := time.Since(last) - time.Since(e.t)
-		last = e.t
-		log.Println("dispatcher got:", path.Base(e.filename), diff)
+		// log.Println("dispatcher got:", path.Base(e.filename), diff)
 		if !w.validator(e.filename) {
-			log.Println("file is not valid,          skipping...")
+			// log.Println("file is not valid,          skipping...")
 			continue
 		}
+		diff := time.Since(last) - time.Since(e.t)
 		if diff < time.Millisecond*100 {
-			log.Println("last event was < 100ms ago, skipping...")
+			// log.Println("last event was < 100ms ago, skipping...")
 			continue
 		}
+		last = e.t
 		go w.callback(e.filename)
 	}
 }
@@ -80,7 +79,7 @@ func (w *watcher) AddWithSubdirs(dir string) {
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && !strings.Contains(path, ".git") {
 			path = normalizePathSeparators(path)
-			log.Println("watching", path)
+			// log.Println("watching", path)
 			w.paths = append(w.paths, path)
 			checkErr(w.w.Add(path))
 		}

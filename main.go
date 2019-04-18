@@ -66,7 +66,7 @@ func gitAmend(f *file, msg string) {
 func main() {
 	w, err := newWatcher(
 		func(filename string) bool {
-			fmt.Println("validator got:", filename)
+			// fmt.Println("validator got:", filename)
 			return filepath.Ext(filename) == ".als"
 		},
 		func(filename string) {
@@ -76,6 +76,7 @@ func main() {
 	checkErr(err)
 
 	w.AddWithSubdirs(".")
+	select {}
 
 	/*
 		    this commits the latest version of all existing .als files
