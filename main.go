@@ -1,27 +1,18 @@
 /*
-   TODO:
-   1. fix the stuff i know isn't working correctly rn
-       ✓ files with spaces in the names
-       ✓ actually running when i hit ctrl+s in ableton
-
-      get this working for a single directory before
-
-   2. ensuring recursive behavior works correctly
-
-      then
-
-   3. create UI concept I've outlined on a piece of paper
+TODO(tso): create UI concept I've outlined on a piece of paper
 */
 
 package main
 
 import (
+	"bufio"
 	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const (
@@ -122,6 +113,11 @@ func gitAmend(filename, msg string) {
 }
 
 func main() {
+	// TODO(tso): flags?
+
+	var lastFilenameMu sync.Mutex
+	lastFilename := ""
+
 	w, err := newWatcher(
 		func(filename string) bool {
 			// fmt.Println("validator got:", filename)
@@ -130,12 +126,35 @@ func main() {
 		func(filename string) {
 			fmt.Println(" callback got:", filename)
 			gitCommit(filename)
+			lastFilenameMu.Lock()
+			defer lastFilenameMu.Unlock()
+			lastFilename = filename
 		},
 	)
 	checkErr(err)
 
 	w.AddWithSubdirs(".")
-	select {}
+
+	// NOTE(tso):  this lets you change the last commit message
+	// by typing into the console while this program is running
+	//
+	// the mutex is necessary because the fsnotify stuff runs async
+	// and i just don't want to run into problems.
+	//
+	// if the dispatcher calls the callback function synchronously instead,
+	// it will throw off the timing with the fsnotify events, because
+	// the callback function will get called for every event which actually
+	// occurred in a < 100ms window because git is very slow
+	//
+	// -tso 2019-04-18 01:43:35a
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		lastFilenameMu.Lock()
+		if lastFilename != "" {
+			gitAmend(lastFilename, scanner.Text())
+		}
+		lastFilenameMu.Unlock()
+	}
 
 	/*
 		    this commits the latest version of all existing .als files
@@ -170,83 +189,4 @@ func main() {
 				return err
 			})
 	*/
-
-	/*
-		    this keeps track of the last repo we worked in
-
-			files := make(chan *file)
-			rf := recentFiles{}
-	*/
-
-	/*
-		    this lets you change the commit message by typing into the console when this program is running
-			go func() {
-				scanner := bufio.NewScanner(os.Stdin)
-				for scanner.Scan() {
-					if len(rf) > 0 {
-						gitAmend(rf[0], scanner.Text())
-					}
-				}
-			}()
-	*/
-
-	/*
-		    this is the old dispatcher routine
-			go func() {
-				for {
-					f := <-files
-					i, ok := rf.Find(f)
-					if !ok || rf[i].Time < f.Time {
-						if ok {
-							rf[i].Time = f.Time
-						} else {
-							rf = append(rf, f)
-							sort.Sort(rf)
-						}
-						gitCommit(f)
-					}
-				}
-			}()
-			for {
-				select {
-				case e := <-w.Event:
-					name := normalizePathSeparators(e.Name)
-					dir := normalizePathSeparators(filepath.Dir(name))
-					ext := filepath.Ext(name)
-					if ext == ".als" {
-						files <- &file{
-							Name: name,
-							Dir:  dir,
-							Ext:  ext,
-							Time: time.Now().Unix(),
-						}
-					} else if dirExists(name) && !strings.Contains(name, ".git") {
-						watchPath(name)
-					}
-				case err := <-w.Error:
-					checkErr(err)
-				}
-			}
-	*/
 }
-
-/*
-this probably isn't needed anymore
-
-type recentFiles []*file
-
-func (rf recentFiles) Len() int { return len(rf) }
-func (rf recentFiles) Less(i, j int) bool {
-	if rf[i].Name == rf[j].Name {
-		return rf[i].Time > rf[j].Time
-	}
-	return rf[i].Name < rf[j].Name
-}
-func (rf recentFiles) Swap(i, j int) { rf[i], rf[j] = rf[j], rf[i] }
-func (rf recentFiles) Find(f *file) (int, bool) {
-	i := sort.Search(len(rf), func(i int) bool {
-		return rf[i].Name == f.Name
-	})
-	return i, i < len(rf) && rf[i].Name == f.Name
-}
-*/
