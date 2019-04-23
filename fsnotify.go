@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -79,7 +80,9 @@ func (w *watcher) AddWithSubdirs(dir string) {
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && !strings.Contains(path, ".git") {
 			path = normalizePathSeparators(path)
-			// log.Println("watching", path)
+			if path != "." {
+				fmt.Println("Watching", path+"/")
+			}
 			w.paths = append(w.paths, path)
 			checkErr(w.w.Add(path))
 		}

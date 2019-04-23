@@ -152,10 +152,31 @@ func gitReset(filename string) {
 }
 
 func main() {
+	fmt.Println("a b l e t o n  +  g i t = <3")
+	fmt.Println("-------------------------")
+	fmt.Println()
+	fmt.Println("This software is EXPERIMENTAL.")
+	fmt.Println()
+	fmt.Println("MAKE BACKUPS OF YOUR PROJECTS BEFORE USING THIS SOFTWARE")
+	fmt.Println("MAKE BACKUPS OF YOUR PROJECTS WHILE USING THIS SOFTWARE")
+	fmt.Println("MAKE BACKUPS OF YOUR PROJECTS AFTER USING THIS SOFTWARE")
+	fmt.Println()
+	fmt.Println("The author takes no responsibility for any loss of data incurred while using this software.")
+	fmt.Println()
+	fmt.Println("Report any issues you may encounter, or any ideas you might have for improving this thing to")
+	fmt.Println("https://github.com/generaltso/ableton-project-version-control-thing/issues")
+	fmt.Println()
+	fmt.Println("-------------------------")
+
 	// TODO(tso): flags?
+
+	cwd, err := os.Getwd()
+	checkErr(err)
+	_, cwd = splitFilename(cwd)
 
 	// NOTE(tso): this commits the latest version of all existing .als files
 	//            creating new repos where necessary
+	fmt.Println("Scanning", cwd, "and all subdirs for existing files:")
 	filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if info.IsDir() && !strings.Contains(path, ".git") {
 			path = normalizePathSeparators(path)
@@ -167,6 +188,7 @@ func main() {
 				for _, f := range files {
 					if filepath.Ext(f.Name()) == ".als" {
 						filename := path + "/" + f.Name()
+						fmt.Println("Found existing project:", filename)
 						gitInit(filename)
 						if gitOnMasterBranch(filename) {
 							gitCommit(filename)
@@ -174,6 +196,8 @@ func main() {
 					}
 				}
 				dir.Close()
+			} else {
+				fmt.Println("Found existing repo at:", path)
 			}
 		}
 		return err
@@ -201,13 +225,14 @@ func main() {
 		// -tso 2019-04-23 02:05:45a
 	)
 
+	fmt.Println("Watching", cwd, "for changes to files...")
 	w, err := newWatcher(
 		func(filename string) bool {
 			// fmt.Println("validator got:", filename)
 			return filepath.Ext(filename) == ".als"
 		},
 		func(filename string) {
-			fmt.Println(" callback got:", filename)
+			fmt.Println("Got file change:", filename)
 			doingGitStuffMu.Lock()
 			defer doingGitStuffMu.Unlock()
 			if doingGitStuff {
@@ -227,6 +252,10 @@ func main() {
 
 	w.AddWithSubdirs(".")
 
+	fmt.Println()
+	fmt.Println("Ready.")
+	help()
+
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		text := scanner.Text()
@@ -236,8 +265,11 @@ func main() {
 		lastFilenameMu.Unlock()
 
 		args := strings.SplitN(text, " ", 2)
-		switch args[0] {
+		switch strings.ToLower(args[0]) {
 		case "": // do nothing
+		case "help", "h", "?":
+			help()
+
 		case "current":
 			lastFilenameMu.Lock()
 			if lastFilename != "" {
@@ -254,6 +286,8 @@ func main() {
 					lastFilenameMu.Unlock()
 					fmt.Println("[ OK ] current file set to:", args[1])
 				}
+			} else {
+				fmt.Println("[INFO] usage: set [FILENAME]")
 			}
 		case "log":
 			if checkLast(last) {
@@ -266,6 +300,8 @@ func main() {
 				doingGitStuffMu.Unlock()
 
 				gitCheckout(last, args[1])
+			} else {
+				fmt.Println("[INFO] usage: checkout [HASH]")
 			}
 		case "save":
 			if checkLast(last) {
@@ -299,4 +335,17 @@ func checkLast(last string) bool {
 		return false
 	}
 	return true
+}
+
+func help() {
+	fmt.Println()
+	fmt.Println("The following commands are available:")
+	fmt.Println("current")
+	fmt.Println("set [FILENAME]")
+	fmt.Println("log")
+	fmt.Println("checkout [HASH]")
+	fmt.Println("save")
+	fmt.Println("cancel")
+	fmt.Println()
+	fmt.Println("to change the most recent commit message, simply type it and press enter")
 }
