@@ -94,7 +94,6 @@ func gitOnMasterBranch(filename string) bool {
 }
 
 func gitCommit(filename string) {
-
 	xmlFilename := strings.TrimSuffix(normalizePathSeparators(filename), ".als") + ".xml"
 	checkErr(gunzip(filename, xmlFilename))
 
@@ -120,13 +119,36 @@ func gitLog(filename string) {
 
 func gitCheckout(filename, revision string) {
 	dir, fname := splitFilename(filename)
-	shellExec(dir, "git", "checkout", revision, "--", fname)
+	xmlFilename := strings.TrimSuffix(normalizePathSeparators(fname), ".als") + ".xml"
+	shellExec(dir, "git", "checkout", "-b", "temp")
+	shellExec(dir, "git", "checkout", revision, "--", xmlFilename)
+}
+
+func gitMerge(filename string) {
+	dir, _ := splitFilename(filename)
+	// NOTE(tso): the post-checkout hook takes care of gzipping the xml file for us
+	// NOTE(tso): the post-checkout hook takes care of gzipping the xml file for us
+	// NOTE(tso): the post-checkout hook takes care of gzipping the xml file for us
+	//xmlFilename := strings.TrimSuffix(normalizePathSeparators(filename), ".als") + ".xml"
+	//checkErr(gunzip(filename, xmlFilename))
+
+	// NOTE(tso): "git checkout revision -- file" automatically adds the file to the index for us
+	// NOTE(tso): "git checkout revision -- file" automatically adds the file to the index for us
+	// NOTE(tso): "git checkout revision -- file" automatically adds the file to the index for us
+	//shellExec(dir, "git", "add", xmlFilename)
+	shellExec(dir, "git", "commit", "-m", "[AUTO] revert "+filename, "--allow-empty-message")
+	shellExec(dir, "git", "checkout", "master")
+	shellExec(dir, "git", "merge", "temp")
+	shellExec(dir, "git", "branch", "-D", "temp")
 }
 
 func gitReset(filename string) {
 	dir, fname := splitFilename(filename)
-	shellExecSilent(dir, "git", "reset", "HEAD")
-	shellExec(dir, "git", "checkout", fname)
+	xmlFilename := strings.TrimSuffix(normalizePathSeparators(fname), ".als") + ".xml"
+	shellExec(dir, "git", "reset", "HEAD")
+	shellExec(dir, "git", "checkout", xmlFilename)
+	shellExec(dir, "git", "checkout", "master")
+	shellExec(dir, "git", "branch", "-D", "temp")
 }
 
 func main() {
@@ -172,6 +194,11 @@ func main() {
 		// occurred in a < 100ms window because git is very slow
 		//
 		// -tso 2019-04-18 01:43:35a
+
+		doingGitStuffMu sync.Mutex
+		doingGitStuff   bool
+		// NOTE(tso): don't want to be auto-committing before/during/after a merge
+		// -tso 2019-04-23 02:05:45a
 	)
 
 	w, err := newWatcher(
@@ -181,6 +208,12 @@ func main() {
 		},
 		func(filename string) {
 			fmt.Println(" callback got:", filename)
+			doingGitStuffMu.Lock()
+			defer doingGitStuffMu.Unlock()
+			if doingGitStuff {
+				return
+			}
+
 			gitInit(filename)
 			if gitOnMasterBranch(filename) {
 				gitCommit(filename)
@@ -205,6 +238,14 @@ func main() {
 		args := strings.SplitN(text, " ", 2)
 		switch args[0] {
 		case "": // do nothing
+		case "current":
+			lastFilenameMu.Lock()
+			if lastFilename != "" {
+				fmt.Println("[INFO] current file is:", lastFilename)
+			} else {
+				fmt.Println("[INFO] current file is not set.")
+			}
+			lastFilenameMu.Unlock()
 		case "set":
 			if len(args) == 2 {
 				if fileExists(args[1]) {
@@ -220,15 +261,27 @@ func main() {
 			}
 		case "checkout":
 			if len(args) == 2 && checkLast(last) {
+				doingGitStuffMu.Lock()
+				doingGitStuff = true
+				doingGitStuffMu.Unlock()
+
 				gitCheckout(last, args[1])
 			}
 		case "save":
-			if len(args) == 2 && checkLast(last) {
-				gitCommit(last)
+			if checkLast(last) {
+				gitMerge(last)
+
+				doingGitStuffMu.Lock()
+				doingGitStuff = false
+				doingGitStuffMu.Unlock()
 			}
 		case "cancel":
 			if checkLast(last) {
 				gitReset(last)
+
+				doingGitStuffMu.Lock()
+				doingGitStuff = false
+				doingGitStuffMu.Unlock()
 			}
 		default:
 			// NOTE(tso):  this lets you change the last commit message
@@ -242,7 +295,7 @@ func main() {
 
 func checkLast(last string) bool {
 	if last == "" {
-		fmt.Println("[OHNO] current file not set")
+		fmt.Println("[OHNO] current file is not set")
 		return false
 	}
 	return true
