@@ -2,6 +2,18 @@
 
 Hey, so I'm actually working on music again and this thing was broken af.
 
+Often when I'm working on music I'll change something and later be
+dissatisfied with it but not remember what I had or worse, not remember
+what I changed.
+
+At the same time, you want to be saving your work constantly in case of
+a crash or power outage. Ableton does have a Crash Recovery Feature, 
+which is nice but it also loses your Undo history every time you save,
+which isn't so nice.
+
+Version control is the commonly accepted solution and this thing
+will `git commit` every time you hit `ctrl+s`.
+
 ## Recommended Usage
 
 1. Run it from the folder where your project lives
