@@ -62,7 +62,7 @@ Additionally, there are some new commands, just type them directly into the cons
 
 This is still very much a work in progress, proper README coming soon™, possibly a GUI who knows
 
-If you know how to use git at all, check out [my other thing](https://github.com/generaltso/go-git-em-tiger) which works very well in tandem with this.
+If you know how to use git at all, check out [my other thing](https://github.com/dayvonjersen/go-git-em-tiger) which works very well in tandem with this.
 
 But if my software isn't good enough for you, here's all you need to know about ableton project files:
 

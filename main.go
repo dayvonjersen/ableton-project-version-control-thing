@@ -164,7 +164,7 @@ func main() {
 	fmt.Println("The author takes no responsibility for any loss of data incurred while using this software.")
 	fmt.Println()
 	fmt.Println("Report any issues you may encounter, or any ideas you might have for improving this thing to")
-	fmt.Println("https://github.com/generaltso/ableton-project-version-control-thing/issues")
+	fmt.Println("https://github.com/dayvonjersen/ableton-project-version-control-thing/issues")
 	fmt.Println()
 	fmt.Println("-------------------------")
 
